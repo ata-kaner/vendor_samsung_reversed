@@ -1,0 +1,18 @@
+/*
+ * Copyright (C) 2026 The LineageOS Project
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package vendor.samsung.hardware.thermal@1.0;
+
+import types;
+
+interface ISehThermalChangedCallback {
+    /**
+     * Send thermal callback to listeners when temperatures change.
+     *
+     * @param temperatures Vector of current Samsung thermal temperatures.
+     */
+    oneway notifyTemperatures(vec<SehTemperature> temperatures);
+};

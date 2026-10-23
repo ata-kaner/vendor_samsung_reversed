@@ -1,0 +1,47 @@
+/*
+ * Copyright (C) 2026 The LineageOS Project
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package vendor.samsung.hardware.thermal@1.0;
+
+import android.hardware.thermal@1.0::ThermalStatus;
+import android.hardware.thermal@2.0::IThermal;
+import ISehThermalChangedCallback;
+import types;
+
+interface ISehThermal extends @2.0::IThermal {
+    /**
+     * Retrieves all current Samsung thermal temperatures.
+     *
+     * @return status ThermalStatus indicating SUCCESS or error code.
+     * @return temperatures Vector of current SehTemperature structures.
+     */
+    sehGetTemperatures() generates (ThermalStatus status, vec<SehTemperature> temperatures);
+
+    /**
+     * Retrieves current temperatures filtered by specific Samsung temperature type.
+     *
+     * @param type The Samsung thermal sensor type to filter.
+     * @return status ThermalStatus indicating SUCCESS or error code.
+     * @return temperatures Vector of current SehTemperature structures.
+     */
+    sehGetTypeTemperatures(SehTemperatureType type) generates (ThermalStatus status, vec<SehTemperature> temperatures);
+
+    /**
+     * Registers a callback interface for Samsung thermal temperature updates.
+     *
+     * @param callback The callback interface instance.
+     * @return status ThermalStatus indicating SUCCESS or error code.
+     */
+    sehRegisterThermalChangedCallback(ISehThermalChangedCallback callback) generates (ThermalStatus status);
+
+    /**
+     * Unregisters a previously registered callback interface.
+     *
+     * @param callback The callback interface instance.
+     * @return status ThermalStatus indicating SUCCESS or error code.
+     */
+    sehUnregisterThermalChangedCallback(ISehThermalChangedCallback callback) generates (ThermalStatus status);
+};

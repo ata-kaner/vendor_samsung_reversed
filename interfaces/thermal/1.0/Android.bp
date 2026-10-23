@@ -1,0 +1,21 @@
+//
+// Copyright (C) 2026 The LineageOS Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+hidl_interface {
+    name: "vendor.samsung.hardware.thermal@1.0",
+    root: "vendor.samsung.hardware",
+    srcs: [
+        "types.hal",
+        "ISehThermal.hal",
+        "ISehThermalChangedCallback.hal",
+    ],
+    interfaces: [
+        "android.hardware.thermal@1.0",
+        "android.hardware.thermal@2.0",
+        "android.hidl.base@1.0",
+    ],
+    gen_java: false,
+}
