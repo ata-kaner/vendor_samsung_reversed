@@ -1,0 +1,5 @@
+service vendor.face-default /vendor/bin/hw/vendor.samsung.hardware.biometrics.face-service
+    class late_start
+    user system
+    group system input uhid
+    capabilities SYS_NICE

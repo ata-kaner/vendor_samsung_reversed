@@ -1,0 +1,84 @@
+//
+// Copyright (C) 2024 The LineageOS Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+aidl_interface {
+    name: "vendor.samsung.hardware.biometrics.face",
+    vendor_available: true,
+    srcs: [
+        "aidl/vendor/samsung/hardware/biometrics/face/*.aidl",
+    ],
+    stability: "vintf",
+    backend: {
+        cpp: {
+            enabled: false,
+        },
+        java: {
+            enabled: true,
+        },
+        ndk: {
+            enabled: true,
+        },
+    },
+    imports: [
+        "android.hardware.common-V2",
+        "android.hardware.biometrics.common-V4",
+        "android.hardware.biometrics.face-V4",
+    ],
+    versions_with_info: [
+        {
+            version: "4",
+            imports: [
+                "android.hardware.common-V2",
+                "android.hardware.biometrics.common-V4",
+                "android.hardware.biometrics.face-V4",
+            ],
+        },
+    ],
+}
+
+cc_binary {
+    name: "vendor.samsung.hardware.biometrics.face-service",
+    relative_install_path: "hw",
+    init_rc: ["vendor.samsung.hardware.biometrics.face-service.rc"],
+    vintf_fragments: ["vendor.samsung.hardware.biometrics.face-service.xml"],
+    vendor: true,
+    srcs: [
+        "CancellationSignal.cpp",
+        "Face.cpp",
+        "FaceAIDLService.cpp",
+        "main.cpp",
+        "SehFace.cpp",
+        "SehSession.cpp",
+        "Session.cpp",
+        "SessionManager.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.biometrics.common-V4-ndk",
+        "android.hardware.biometrics.face-V4-ndk",
+        "android.hardware.common-V2-ndk",
+        "android.hardware.graphics.bufferqueue@1.0",
+        "android.hardware.keymaster-V4-ndk",
+        "android.hidl.token@1.0-utils",
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libdl",
+        "libgui",
+        "libhidlbase",
+        "liblog",
+        "libutils",
+        "vendor.samsung.hardware.biometrics.face-V4-ndk",
+    ],
+    header_libs: [
+        "libhardware_headers",
+        "libnativewindow_headers",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+    ],
+}
