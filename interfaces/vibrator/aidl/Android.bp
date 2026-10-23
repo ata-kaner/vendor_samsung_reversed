@@ -1,0 +1,25 @@
+//
+// SPDX-FileCopyrightText: 2026 The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+aidl_interface {
+    name: "vendor.samsung.hardware.vibrator",
+    vendor_available: true,
+    srcs: [
+        "vendor/samsung/hardware/vibrator/*.aidl",
+    ],
+    stability: "vintf",
+    imports: [
+        "android.hardware.vibrator-V2",
+    ],
+    backend: {
+        java: {
+            platform_apis: true,
+        },
+        ndk: {
+            enabled: true,
+        },
+    },
+    owner: "samsung",
+}

@@ -1,0 +1,24 @@
+//
+// SPDX-FileCopyrightText: 2026 The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+cc_binary {
+    name: "vendor.samsung.hardware.vibrator-service",
+    relative_install_path: "hw",
+    init_rc: ["vendor.samsung.hardware.vibrator-service.rc"],
+    vintf_fragments: ["vendor.samsung.hardware.vibrator-service.xml"],
+    srcs: [
+        "HwApi.cpp",
+        "Vibrator.cpp",
+        "Vibrator_vendor.cpp",
+        "main.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "android.hardware.vibrator-V2-ndk",
+        "vendor.samsung.hardware.vibrator-ndk",
+    ],
+    vendor: true,
+}
