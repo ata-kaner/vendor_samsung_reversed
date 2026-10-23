@@ -1,0 +1,5 @@
+service vendor-thermal-hal /vendor/bin/hw/vendor.samsung.hardware.thermal-service
+    class hal
+    user system
+    group system
+    shutdown critical

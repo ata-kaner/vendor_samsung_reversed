@@ -1,0 +1,32 @@
+//
+// SPDX-FileCopyrightText: 2026 The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+cc_binary {
+    name: "vendor.samsung.hardware.thermal-service",
+    relative_install_path: "hw",
+    init_rc: ["vendor.samsung.hardware.thermal-service.rc"],
+    vintf_fragments: ["vendor.samsung.hardware.thermal-service.xml"],
+    vendor: true,
+    srcs: [
+        "main.cpp",
+        "BootControl.cpp",
+        "CameraServiceListener.cpp",
+        "IntervalTimer.cpp",
+        "mercury.cpp",
+        "ThermalCore.cpp",
+        "Thermal.cpp",
+        "SehThermal.cpp",
+    ],
+    shared_libs: [
+        "android.hardware.thermal-V1-ndk",
+        "vendor.samsung.hardware.thermal-V1-ndk",
+        "libbase",
+        "libbinder_ndk",
+        "libcutils",
+        "libjsoncpp",
+        "liblog",
+        "libutils",
+    ],
+}

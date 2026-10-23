@@ -1,0 +1,33 @@
+//
+// SPDX-FileCopyrightText: 2026 The LineageOS Project
+// SPDX-License-Identifier: Apache-2.0
+//
+
+aidl_interface {
+    name: "vendor.samsung.hardware.thermal",
+    vendor_available: true,
+    srcs: [
+        "vendor/samsung/hardware/thermal/*.aidl",
+    ],
+    stability: "vintf",
+    owner: "samsung",
+    imports: [
+        "android.hardware.thermal-V1",
+    ],
+    backend: {
+        ndk: {
+            enabled: true,
+        },
+        java: {
+            platform_apis: true,
+        },
+    },
+    frozen: true,
+    versions_with_info: [
+        {
+            version: "1",
+            imports: ["android.hardware.thermal-V1"],
+        },
+    ],
+
+}
