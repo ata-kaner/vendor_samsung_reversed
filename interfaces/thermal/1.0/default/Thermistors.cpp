@@ -9,7 +9,9 @@
 #include <android/log.h>
 #include <sys/stat.h>
 
+#include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
@@ -89,6 +91,23 @@ int ReadableThermistor::get_temperature() {
 }
 
 // -----------------------------------------------------------------------------
+// VirtualThermistor
+// -----------------------------------------------------------------------------
+#if defined(TARGET_USES_EXYNOS_THERMAL)
+VirtualThermistor::VirtualThermistor(const std::string& name, SehTemperatureType type)
+    : Thermistor(name, type), mCurrentVal(-300) {}
+
+void VirtualThermistor::update_temperature(std::map<std::string, int>* temps) {
+    if (temps) {
+        auto it = temps->find(mName);
+        if (it != temps->end()) {
+            mCurrentVal = it->second;
+        }
+    }
+}
+#endif
+
+// -----------------------------------------------------------------------------
 // ThermistorGroup base
 // -----------------------------------------------------------------------------
 
@@ -125,7 +144,7 @@ void ThermistorGroup::set_enabled(bool enabled) {
 }
 
 // -----------------------------------------------------------------------------
-// BasicThermistorGroup (Samsung Physical Sysfs Sensors)
+// BasicThermistorGroup (Samsung Physical Sysfs Sensors - Shared across SoCs)
 // -----------------------------------------------------------------------------
 
 BasicThermistorGroup::BasicThermistorGroup() {
@@ -216,9 +235,10 @@ BasicThermistorGroup::BasicThermistorGroup() {
 }
 
 // -----------------------------------------------------------------------------
-// QcModemThermistorGroup (Qualcomm Modem Thermal Zones)
+// QcModemThermistorGroup (Qualcomm Modem Thermal Zones - Snapdragon)
 // -----------------------------------------------------------------------------
 
+#if defined(TARGET_USES_QC_THERMAL)
 QcModemThermistorGroup::QcModemThermistorGroup() {
     static const std::map<std::string, std::pair<std::string, SehTemperatureType>> kModemMap = {
             {"modem-0-usr", {"CPTSENS", SehTemperatureType::SEH_MODEM}},
@@ -247,7 +267,6 @@ QcModemThermistorGroup::QcModemThermistorGroup() {
 
         std::string zoneType;
         if (std::getline(typeFile, zoneType)) {
-            // Trim trailing newline or whitespace
             while (!zoneType.empty() && (zoneType.back() == '\r' || zoneType.back() == '\n' || zoneType.back() == ' ')) {
                 zoneType.pop_back();
             }
@@ -264,6 +283,158 @@ QcModemThermistorGroup::QcModemThermistorGroup() {
         }
     }
 }
+#endif
+
+// -----------------------------------------------------------------------------
+// LsiModemThermistorGroup (Samsung LSI Modem RIL - Exynos)
+// -----------------------------------------------------------------------------
+#if defined(TARGET_USES_EXYNOS_THERMAL)
+LsiModemThermistorGroup* LsiModemThermistorGroup::sInstance = nullptr;
+
+LsiModemThermistorGroup::LsiModemThermistorGroup()
+    : mRilClient(nullptr),
+      mRilConnected(false),
+      mReceivedData(nullptr),
+      mRequestPending(false) {
+    sInstance = this;
+
+    mRilClient = OpenClient_RILD();
+    if (mRilClient != nullptr) {
+        find_thermistors();
+    } else {
+        LOGE("Cannot connect to RILD");
+        mRetryTimer.set(5000, &LsiModemThermistorGroup::retry_find_thermistors);
+    }
+}
+
+LsiModemThermistorGroup::~LsiModemThermistorGroup() {
+    mRetryTimer.kill();
+    if (mRilClient != nullptr) {
+        CloseClient_RILD(mRilClient);
+        mRilClient = nullptr;
+    }
+    sInstance = nullptr;
+}
+
+void LsiModemThermistorGroup::retry_find_thermistors(sigval /* val */) {
+    if (sInstance) {
+        sInstance->find_thermistors();
+    }
+}
+
+void LsiModemThermistorGroup::find_thermistors() {
+    mSensorIdMap = {
+            {0x11, "PAMN41"},
+            {0x12, "PAMLTE"},
+            {0x21, "ANTID1"},
+            {0x22, "ANTID2"},
+            {0x23, "ANTID3"},
+            {0x24, "ANTID4"},
+    };
+
+    add_thermistor(std::make_unique<VirtualThermistor>("PAMN41", SehTemperatureType::POWER_AMPLIFIER));
+    add_thermistor(std::make_unique<VirtualThermistor>("PAMLTE", SehTemperatureType::POWER_AMPLIFIER));
+    add_thermistor(std::make_unique<VirtualThermistor>("ANTID1", SehTemperatureType::SEH_MODEM));
+    add_thermistor(std::make_unique<VirtualThermistor>("ANTID2", SehTemperatureType::SEH_MODEM));
+    add_thermistor(std::make_unique<VirtualThermistor>("ANTID3", SehTemperatureType::SEH_MODEM));
+    add_thermistor(std::make_unique<VirtualThermistor>("ANTID4", SehTemperatureType::SEH_MODEM));
+}
+
+void LsiModemThermistorGroup::set_enabled(bool enabled) {
+    ThermistorGroup::set_enabled(enabled);
+}
+
+void LsiModemThermistorGroup::on_complete(HRilClient /* client */, const void* data, size_t /* datalen */) {
+    if (!sInstance) return;
+
+    std::lock_guard<std::mutex> lock(sInstance->mRilLock);
+    sInstance->mReceivedData = const_cast<char*>(static_cast<const char*>(data));
+    sInstance->mRequestPending = false;
+    sInstance->mRilCv.notify_all();
+}
+
+int LsiModemThermistorGroup::request_to_ril() {
+    if (!mRilClient) return -1;
+
+    if (!isConnected_RILD(mRilClient)) {
+        if (Connect_RILD(mRilClient) != 0) {
+            LOGE("Cannot connect to RILD");
+            return -1;
+        }
+    }
+
+    // OEM request hook code 0x04000911 for querying Shannon CP temperatures
+    uint32_t cmd = 0x04000911;
+    return InvokeOemRequestHookRaw(mRilClient, reinterpret_cast<char*>(&cmd), sizeof(cmd));
+}
+
+char* LsiModemThermistorGroup::get_raw_cp_temperature() {
+    if (!mRilClient) {
+        mRilClient = OpenClient_RILD();
+        if (!mRilClient) return nullptr;
+    }
+
+    std::unique_lock<std::mutex> lock(mRilLock);
+    mReceivedData = nullptr;
+    mRequestPending = true;
+
+    RegisterRequestCompleteHandler(mRilClient, 59 /* 0x3b */, &LsiModemThermistorGroup::on_complete);
+
+    if (request_to_ril() != 0) {
+        mRequestPending = false;
+        return nullptr;
+    }
+
+    if (mRilCv.wait_for(lock, std::chrono::seconds(1), [this] { return !mRequestPending; })) {
+        return mReceivedData;
+    }
+
+    LOGE("ril callback has timed out ");
+    mRequestPending = false;
+    return nullptr;
+}
+
+void LsiModemThermistorGroup::parse_cp_temperature(char* data) {
+    if (!data) return;
+
+    uint8_t count = static_cast<uint8_t>(data[0]);
+    for (uint8_t i = 0; i < count; ++i) {
+        int offset = 1 + (i * 4);
+        uint8_t sensorId = static_cast<uint8_t>(data[offset]);
+        // uint8_t enabled = static_cast<uint8_t>(data[offset + 1]);
+        uint8_t tempLow = static_cast<uint8_t>(data[offset + 2]);
+        uint8_t tempHigh = static_cast<uint8_t>(data[offset + 3]);
+
+        int16_t rawTemp = static_cast<int16_t>(tempLow | (tempHigh << 8));
+
+        auto it = mSensorIdMap.find(sensorId);
+        if (it != mSensorIdMap.end()) {
+            mSensorTemps[it->second] = rawTemp;
+        }
+    }
+}
+
+void LsiModemThermistorGroup::get_temperatures(std::map<std::string, int>* temps) {
+    if (!temps) return;
+
+    char* data = get_raw_cp_temperature();
+    if (data) {
+        parse_cp_temperature(data);
+    }
+
+    for (const auto& pair : mSensorTemps) {
+        (*temps)[pair.first] = pair.second;
+    }
+
+    // Update internal virtual thermistors
+    for (const auto& th : mThermistors) {
+        VirtualThermistor* vt = dynamic_cast<VirtualThermistor*>(th.get());
+        if (vt) {
+            vt->update_temperature(temps);
+        }
+    }
+}
+#endif
 
 // -----------------------------------------------------------------------------
 // VirtualThermistorGroup (Samsung Mercury Virtual Predictors)

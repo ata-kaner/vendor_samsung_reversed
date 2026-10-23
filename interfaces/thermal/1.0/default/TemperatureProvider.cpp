@@ -35,7 +35,13 @@ TemperatureProvider::TemperatureProvider(NotifyCallback notifyCb)
     sInstance = this;
 
     mBasicGroup = std::make_unique<BasicThermistorGroup>();
+
+#if defined(TARGET_USES_EXYNOS_THERMAL)
+    mModemGroup = std::make_unique<LsiModemThermistorGroup>();
+#elif defined(TARGET_USES_QC_THERMAL)
     mModemGroup = std::make_unique<QcModemThermistorGroup>();
+#endif
+
     mVirtualGroup = std::make_unique<VirtualThermistorGroup>();
     mBootControl = std::make_unique<BootControl>();
 

@@ -62,7 +62,7 @@ private:
     IntervalTimer mTimer;
 
     std::unique_ptr<BasicThermistorGroup> mBasicGroup;
-    std::unique_ptr<QcModemThermistorGroup> mModemGroup;
+    std::unique_ptr<ThermistorGroup> mModemGroup;
     std::unique_ptr<VirtualThermistorGroup> mVirtualGroup;
     std::unique_ptr<BootControl> mBootControl;
 

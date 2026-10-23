@@ -7,16 +7,28 @@
 #ifndef THERMISTORS_H
 #define THERMISTORS_H
 
+#include <condition_variable>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
+#include "IntervalTimer.h"
 #include "Predictor.h"
+
 #if __has_include(<vendor/samsung/hardware/thermal/1.0/types.h>)
 #include <vendor/samsung/hardware/thermal/1.0/types.h>
 #else
 #include "include/vendor/samsung/hardware/thermal/1.0/types.h"
+#endif
+
+#if defined(TARGET_USES_EXYNOS_THERMAL) || !defined(TARGET_USES_QCOM_THERMAL)
+#if __has_include(<secril-client.h>)
+#include <secril-client.h>
+#else
+#include "include/secril-client.h"
+#endif
 #endif
 
 namespace vendor {
@@ -66,6 +78,21 @@ private:
     bool mAvailable;
 };
 
+#if defined(TARGET_USES_EXYNOS_THERMAL)
+class VirtualThermistor : public Thermistor {
+public:
+    VirtualThermistor(const std::string& name, SehTemperatureType type);
+    ~VirtualThermistor() override = default;
+
+    void update_temperature(std::map<std::string, int>* temps);
+    int get_temperature() override { return mCurrentVal; }
+    bool is_available() const override { return mCurrentVal > -300; }
+
+private:
+    int mCurrentVal;
+};
+#endif
+
 class ThermistorGroup {
 public:
     ThermistorGroup() = default;
@@ -87,11 +114,47 @@ public:
     ~BasicThermistorGroup() override = default;
 };
 
+// Qualcomm Modem Thermal Zone implementation (Snapdragon - e.g. r8q)
+#if defined(TARGET_USES_QC_THERMAL)
 class QcModemThermistorGroup : public ThermistorGroup {
 public:
     QcModemThermistorGroup();
     ~QcModemThermistorGroup() override = default;
 };
+#endif
+
+#if defined(TARGET_USES_EXYNOS_THERMAL)
+// Samsung LSI Modem RIL implementation (Exynos - e.g. x1s)
+class LsiModemThermistorGroup : public ThermistorGroup {
+public:
+    LsiModemThermistorGroup();
+    ~LsiModemThermistorGroup() override;
+
+    void find_thermistors();
+    void get_temperatures(std::map<std::string, int>* temps) override;
+    void set_enabled(bool enabled) override;
+
+    static void on_complete(HRilClient client, const void* data, size_t datalen);
+    static void retry_find_thermistors(sigval val);
+
+private:
+    char* get_raw_cp_temperature();
+    void parse_cp_temperature(char* data);
+    int request_to_ril();
+
+    HRilClient mRilClient;
+    bool mRilConnected;
+    std::mutex mRilLock;
+    std::condition_variable mRilCv;
+    char* mReceivedData;
+    bool mRequestPending;
+    IntervalTimer mRetryTimer;
+    std::map<int, std::string> mSensorIdMap;
+    std::map<std::string, int> mSensorTemps;
+
+    static LsiModemThermistorGroup* sInstance;
+};
+#endif
 
 class VirtualThermistorGroup : public ThermistorGroup {
 public:
