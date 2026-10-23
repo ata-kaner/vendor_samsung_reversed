@@ -30,8 +30,11 @@ on init
     chown system system /sys/class/leds/vibrator/asp_enable
     chown system system /sys/class/leds/vibrator/cp_trigger_queue
 
+    chown system system /sys/class/sec_vib_inputff/control/use_sep_index
+    chown system system /sys/class/vib_info_class/vib_support_info/functions
+
 service vendor.vibrator-default /vendor/bin/hw/vendor.samsung.hardware.vibrator-service
     class hal
     user system
-    group system
+    group system input
     shutdown critical

@@ -3,10 +3,11 @@
         <name>android.hardware.vibrator</name>
         <version>2</version>
         <fqname>IVibrator/default</fqname>
+        <fqname>IVibratorManager/default</fqname>
     </hal>
     <hal format="aidl">
         <name>vendor.samsung.hardware.vibrator</name>
-        <version>3</version>
+        <version>5</version>
         <fqname>ISehVibrator/default</fqname>
     </hal>
 </manifest>

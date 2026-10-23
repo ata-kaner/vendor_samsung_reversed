@@ -11,6 +11,7 @@
 #include <aidl/vendor/samsung/hardware/vibrator/BnSehVibrator.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace aidl {
@@ -56,6 +57,11 @@ class Vibrator : public BnSehVibrator {
             const std::vector<SehHybridHapticEnginePacket>& packets, int32_t repeat) override;
     ndk::ScopedAStatus supportsFolderTentModeStatusSetting(bool* _aidl_return) override;
     ndk::ScopedAStatus setFolderTentModeStatus(SehFolderTentModeStatus status) override;
+    ndk::ScopedAStatus supportsHasFeature(bool* _aidl_return) override;
+    ndk::ScopedAStatus hasFeature(const std::string& feature, bool* _aidl_return) override;
+    ndk::ScopedAStatus performCommonInputff(
+            const std::vector<SehCommonInputffPacket>& packets, bool repeat,
+            int32_t timeout) override;
 
   private:
     bool __getDynamicAmplitudeList(SehAmplitudeType type, std::vector<int32_t>* _aidl_return);

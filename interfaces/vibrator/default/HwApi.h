@@ -10,11 +10,13 @@
 
 #include <aidl/android/hardware/vibrator/Effect.h>
 #include <aidl/android/hardware/vibrator/EffectStrength.h>
+#include <linux/input.h>
 
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace aidl {
 namespace android {
@@ -40,6 +42,8 @@ class HwApi {
     int getMotorPerformMethod();
 
     bool hasFeature(sec_features feature);
+    bool hasFeature(const std::string& feature);
+    bool supportsHasFeature();
 
     bool isAmplitudeControlExist();
     bool isCalDynamicIntensitiesNodeExist();
@@ -79,6 +83,17 @@ class HwApi {
 
     bool supportsEnhancedSamsungHapticPattern();
 
+    // Force feedback & CommonInputFF methods
+    bool initForceFeedbackEffect();
+    bool uploadForceFeedbackeffect();
+    bool writeInputEvent(uint16_t type, uint16_t code, int32_t value);
+    bool triggerForceFeedbackVibration(int value);
+    bool setForceFeedbackIndex(int index);
+    bool setForceFeedbackDuration(int duration);
+    bool setForceFeedbackAmplitude(int amplitude);
+    bool setAndTriggerCommonInputff(const common_inputff_effects* effects);
+    std::string get_input_field_value();
+
     void debug(int fd);
 
     // Node path accessors
@@ -101,6 +116,8 @@ class HwApi {
     const std::string& getAspEnableNode() const { return mAspEnableNode; }
     const std::string& getFifoNode() const { return mFifoNode; }
     const std::string& getHybridHapticEngineNode() const { return mHybridHapticEngineNode; }
+    const std::string& getUseSepIndexNode() const { return mUseSepIndexNode; }
+    const std::string& getSupportFunctionsNode() const { return mSupportFunctionsNode; }
 
   private:
     std::string mPrefix;
@@ -128,11 +145,17 @@ class HwApi {
     std::string mFifoNode;
     std::string mHybridHapticEngineNode;
     std::string mSupportFunctionsNode;
+    std::string mUseSepIndexNode;
 
     int mMotorIndex;
     bool mCalDynamicIntensities;
     int mAspEnable;
     uint32_t mSupportFeatures;
+
+    int mInputFd;
+    int16_t mFfEffectId;
+    struct ff_effect mFfEffect;
+    std::string mInputDevicePath;
 
     std::mutex mLock;
 };

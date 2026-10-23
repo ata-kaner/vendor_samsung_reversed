@@ -14,6 +14,9 @@
 #include <sstream>
 #include <thread>
 
+using aidl::android::hardware::vibrator::common_inputff_effects;
+using aidl::android::hardware::vibrator::HYBRID_PATTERN_COMMON_INPUTFF;
+
 namespace aidl {
 namespace vendor {
 namespace samsung {
@@ -130,11 +133,11 @@ ndk::ScopedAStatus Vibrator::setFrequencyType(SehFrequencyType type) {
 
     int val = static_cast<int>(type);
     if (val < 0 || val >= 5) {
-        LOG(ERROR) << "V_3_0: setFrequencyType is abnormal " << val;
+        LOG(ERROR) << "V_5_0: setFrequencyType is abnormal " << val;
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
     }
 
-    LOG(INFO) << "V_3_0: setFrequencyType " << val;
+    LOG(INFO) << "V_5_0: setFrequencyType " << val;
     mHwApi->writeNode(mHwApi->getMultiFreqNode(), val);
     return ndk::ScopedAStatus::ok();
 }
@@ -150,12 +153,12 @@ ndk::ScopedAStatus Vibrator::setFolderStatus(SehFolderStatus status) {
     } else if (status == SehFolderStatus::OPEN) {
         cmd = "FOLDER_OPEN\n";
     } else {
-        LOG(ERROR) << "V_3_0: setFolderStatus enum error";
+        LOG(ERROR) << "V_5_0: setFolderStatus enum error";
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
     }
 
     if (!mHwApi->writeNodeByStringOnlyForWriting(mHwApi->getEventCmdNode(), cmd)) {
-        LOG(ERROR) << "V_3_0: setFolderStatus is fail: " << static_cast<int>(status);
+        LOG(ERROR) << "V_5_0: setFolderStatus is fail: " << static_cast<int>(status);
     }
     LOG(INFO) << "setFolderStatus end";
     return ndk::ScopedAStatus::ok();
@@ -191,7 +194,7 @@ ndk::ScopedAStatus Vibrator::performHapticEngine(
     }
 
     if (packets.size() * 4 > 3400) {
-        LOG(ERROR) << "V_3_0: performHapticEngine packet size is exceed";
+        LOG(ERROR) << "V_5_0: performHapticEngine packet size is exceed";
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
     }
 
@@ -234,11 +237,11 @@ bool Vibrator::__getDynamicAmplitudeList(SehAmplitudeType type,
     } else if (type == SehAmplitudeType::DYNAMIC) {
         node = mHwApi->getIntensitiesNode();
     } else {
-        LOG(ERROR) << "V_3_0: getDynamicAmplitudeList amplitude type is worng";
+        LOG(ERROR) << "V_5_0: getDynamicAmplitudeList amplitude type is worng";
         return false;
     }
 
-    LOG(INFO) << "V_3_0: getDynamicAmplitudeList node: " << node;
+    LOG(INFO) << "V_5_0: getDynamicAmplitudeList node: " << node;
     std::string content = mHwApi->readNode(node);
     if (content.empty()) {
         LOG(WARNING) << "getDynamicAmplitudeList is empty";
@@ -266,7 +269,7 @@ ndk::ScopedAStatus Vibrator::getAmplitudeList(SehAmplitudeType type,
         return ndk::ScopedAStatus::ok();
     }
 
-    LOG(INFO) << "V_3_0: getAmplitudeList amplitude type: " << static_cast<int>(type);
+    LOG(INFO) << "V_5_0: getAmplitudeList amplitude type: " << static_cast<int>(type);
 
     if (__getDynamicAmplitudeList(type, _aidl_return)) {
         LOG(INFO) << "getAmplitudeList size: " << _aidl_return->size();
@@ -411,12 +414,12 @@ ndk::ScopedAStatus Vibrator::performFifoHapticEngine(SehFifoType type) {
 
     int val = static_cast<int>(type);
     if (val < 0 || val >= 26) {
-        LOG(ERROR) << "V_3_0: performFifoHapticEngine is abnormal " << val;
+        LOG(ERROR) << "V_5_0: performFifoHapticEngine is abnormal " << val;
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
     }
 
     mHwApi->writeNode(mHwApi->getFifoNode(), val);
-    LOG(INFO) << "V_3_0: performFIFOHapticEngine OK";
+    LOG(INFO) << "V_5_0: performFIFOHapticEngine OK";
     return ndk::ScopedAStatus::ok();
 }
 
@@ -477,7 +480,7 @@ ndk::ScopedAStatus Vibrator::setFolderTentModeStatus(SehFolderTentModeStatus sta
     } else if (status == SehFolderTentModeStatus::OPEN) {
         cmd = "FOLDER_TENT_OPEN\n";
     } else {
-        LOG(ERROR) << "V_3_0: setFolderTentModeStatus enum error";
+        LOG(ERROR) << "V_5_0: setFolderTentModeStatus enum error";
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
     }
 
@@ -485,6 +488,68 @@ ndk::ScopedAStatus Vibrator::setFolderTentModeStatus(SehFolderTentModeStatus sta
         LOG(ERROR) << "setFolderTentModeStatus is fail: " << static_cast<int>(status);
     }
     LOG(INFO) << "setFolderTentModeStatus end";
+    return ndk::ScopedAStatus::ok();
+}
+
+ndk::ScopedAStatus Vibrator::supportsHasFeature(bool* _aidl_return) {
+    if (!mHwApi->checkClientUID(AIBinder_getCallingUid())) {
+        *_aidl_return = false;
+        return ndk::ScopedAStatus::fromExceptionCode(EX_SECURITY);
+    }
+    *_aidl_return = mHwApi->supportsHasFeature();
+    return ndk::ScopedAStatus::ok();
+}
+
+ndk::ScopedAStatus Vibrator::hasFeature(const std::string& feature, bool* _aidl_return) {
+    if (!mHwApi->checkClientUID(AIBinder_getCallingUid())) {
+        *_aidl_return = false;
+        return ndk::ScopedAStatus::fromExceptionCode(EX_SECURITY);
+    }
+    if (feature.empty()) {
+        *_aidl_return = false;
+        return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+    }
+    if (!mHwApi->supportsHasFeature()) {
+        *_aidl_return = false;
+        return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
+    }
+    *_aidl_return = mHwApi->hasFeature(feature);
+    return ndk::ScopedAStatus::ok();
+}
+
+ndk::ScopedAStatus Vibrator::performCommonInputff(
+        const std::vector<SehCommonInputffPacket>& packets, bool repeat, int32_t timeout) {
+    LOG(DEBUG) << "[performCommonInputff]";
+    if (!mHwApi->checkClientUID(AIBinder_getCallingUid())) {
+        return ndk::ScopedAStatus::fromExceptionCode(EX_SECURITY);
+    }
+    if (!mHwApi->hasFeature(HYBRID_PATTERN_COMMON_INPUTFF)) {
+        return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
+    }
+    if (packets.empty() || packets.size() > 32) {
+        return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+    }
+    if (timeout < 1 || timeout > 10000) {
+        LOG(ERROR) << "Duration too long: " << timeout << " ms";
+        return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+    }
+
+    common_inputff_effects effects;
+    memset(&effects, 0, sizeof(effects));
+    effects.count = packets.size();
+    effects.repeat = repeat ? 1 : 0;
+
+    for (size_t i = 0; i < packets.size(); ++i) {
+        effects.packets[i].data1 = packets[i].data1;
+        effects.packets[i].data2 = packets[i].data2;
+        effects.packets[i].data3 = packets[i].data3;
+        effects.packets[i].data4 = packets[i].data4;
+        effects.packets[i].data5 = packets[i].data5;
+    }
+
+    if (!mHwApi->setAndTriggerCommonInputff(&effects)) {
+        return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
+    }
     return ndk::ScopedAStatus::ok();
 }
 

@@ -11,6 +11,7 @@ cc_binary {
     srcs: [
         "HwApi.cpp",
         "Vibrator.cpp",
+        "VibratorManager.cpp",
         "Vibrator_vendor.cpp",
         "main.cpp",
     ],

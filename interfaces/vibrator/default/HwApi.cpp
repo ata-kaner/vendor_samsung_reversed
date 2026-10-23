@@ -11,8 +11,13 @@
 #include <android-base/strings.h>
 
 #include <chrono>
+#include <cerrno>
+#include <cstring>
 #include <fcntl.h>
 #include <fstream>
+#include <sstream>
+#include <sys/ioctl.h>
+#include <sys/time.h>
 #include <thread>
 #include <unistd.h>
 
@@ -35,6 +40,7 @@ static const std::vector<std::pair<std::string, sec_features>> kFeatureMap = {
     {"CAPABILITY_EXTERNAL_CONTROL", CAPABILITY_EXTERNAL_CONTROL},
     {"COMMON_INPUTFF_INTERFACE", COMMON_INPUTFF_INTERFACE},
     {"PRIMITIVE_EFFECT_COMPOSE", PRIMITIVE_EFFECT_COMPOSE},
+    {"HYBRID_PATTERN_COMMON_INPUTFF", HYBRID_PATTERN_COMMON_INPUTFF},
 };
 
 static const std::vector<std::pair<std::string, int>> kMotorTypeMap = {
@@ -56,7 +62,9 @@ HwApi::HwApi()
       mMotorIndex(0),
       mCalDynamicIntensities(false),
       mAspEnable(0),
-      mSupportFeatures(0) {
+      mSupportFeatures(0),
+      mInputFd(-1),
+      mFfEffectId(-1) {
     if (access("/sys/class/timed_output/vibrator/enable", F_OK) == 0) {
         mUseLeds = false;
         mPrefix = "/sys/class/timed_output/vibrator/";
@@ -91,6 +99,9 @@ HwApi::HwApi()
     mFifoNode = mPrefix + "fifo";
     mHybridHapticEngineNode = mPrefix + "hybrid_haptic_engine";
     mSupportFunctionsNode = "/sys/class/vib_info_class/vib_support_info/functions";
+    mUseSepIndexNode = "/sys/class/sec_vib_inputff/control/use_sep_index";
+
+    memset(&mFfEffect, 0, sizeof(mFfEffect));
 
     std::string funcs = readNode(mSupportFunctionsNode);
     for (const auto& [name, feat] : kFeatureMap) {
@@ -103,21 +114,38 @@ HwApi::HwApi()
     LOG(INFO) << "Vibrator THE_DEVICE_MOTOR_TYPE : " << mMotorIndex;
 
     mCalDynamicIntensities = isCalDynamicIntensitiesNodeExist();
-    LOG(INFO) << "isCalDynamicIntensitiesNodeExist : " << (mCalDynamicIntensities ? "true" : "false");
+    LOG(INFO) << "isCalDynamicIntensitiesNodeExist : "
+              << (mCalDynamicIntensities ? "true" : "false");
 
     if (hasAspEnable()) {
         mAspEnable = getAspEnable();
         LOG(INFO) << "Vibrator THE_DEVICE_ASP_ENABLE : " << mAspEnable;
     }
+
+    if (hasFeature(COMMON_INPUTFF_INTERFACE) ||
+        hasFeature(HYBRID_PATTERN_COMMON_INPUTFF) ||
+        access(mUseSepIndexNode.c_str(), F_OK) == 0) {
+        initForceFeedbackEffect();
+    }
 }
 
-HwApi::~HwApi() {}
+HwApi::~HwApi() {
+    if (mInputFd >= 0) {
+        if (mFfEffectId != -1) {
+            ioctl(mInputFd, EVIOCRMFF, mFfEffectId);
+            mFfEffectId = -1;
+        }
+        close(mInputFd);
+        mInputFd = -1;
+        LOG(INFO) << "inputFD close";
+    }
+}
 
 bool HwApi::checkClientUID(int uid) {
     if (uid == 1000 || uid == 0) {
         return true;
     }
-    LOG(ERROR) << "V_3_0: Pemission denied (" << uid << ")";
+    LOG(ERROR) << "V_5_0: Pemission denied (" << uid << ")";
     return false;
 }
 
@@ -235,6 +263,29 @@ int HwApi::getMotorPerformMethod() {
 
 bool HwApi::hasFeature(sec_features feature) {
     return (mSupportFeatures & (1u << feature)) != 0;
+}
+
+bool HwApi::hasFeature(const std::string& feature) {
+    LOG(DEBUG) << "[hasFeature] feature: " << feature;
+    if (feature.empty() || !isNodeExist(mSupportFunctionsNode)) {
+        return false;
+    }
+    std::string allFeatures = readNode(mSupportFunctionsNode);
+    if (allFeatures.empty()) {
+        return false;
+    }
+    std::istringstream stream(allFeatures);
+    std::string token;
+    while (std::getline(stream, token, ' ')) {
+        if (token == feature) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool HwApi::supportsHasFeature() {
+    return isNodeExist(mSupportFunctionsNode);
 }
 
 bool HwApi::isAmplitudeControlExist() {
@@ -430,6 +481,165 @@ bool HwApi::supportsEnhancedSamsungHapticPattern() {
     return mMotorIndex == MOTOR_LINEAR_1040 || isHapticEngineNodeExist();
 }
 
+std::string HwApi::get_input_field_value() {
+    FILE* fp = fopen("/proc/bus/input/devices", "r");
+    if (!fp) {
+        LOG(ERROR) << "Failed to open /proc/bus/input/devices: " << strerror(errno);
+        return "";
+    }
+
+    char line[1024];
+    bool foundDevice = false;
+    std::string eventNode;
+
+    while (fgets(line, sizeof(line), fp)) {
+        if (!foundDevice) {
+            if (strstr(line, "N: Name=\"sec_vibrator_inputff\"")) {
+                foundDevice = true;
+            }
+        } else {
+            if (line[0] == '\n') {
+                foundDevice = false;
+                continue;
+            }
+            if (line[0] == 'H') {
+                char* p = strstr(line, "event");
+                if (p) {
+                    char eventName[64] = {0};
+                    if (sscanf(p, "%63s", eventName) == 1) {
+                        eventNode = std::string("/dev/input/") + eventName;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    fclose(fp);
+    return eventNode;
+}
+
+bool HwApi::initForceFeedbackEffect() {
+    LOG(DEBUG) << "[initForceFeedbackEffect]";
+    if (mInputFd >= 0) {
+        return true;
+    }
+
+    mInputDevicePath = get_input_field_value();
+    if (mInputDevicePath.empty()) {
+        LOG(WARNING) << "[initForceFeedbackEffect] sec_vibrator_inputff not found in /proc/bus/input/devices";
+        return false;
+    }
+
+    mInputFd = open(mInputDevicePath.c_str(), O_RDWR | O_CLOEXEC);
+    if (mInputFd < 0) {
+        LOG(ERROR) << "[initForceFeedbackEffect] Failed to open " << mInputDevicePath
+                   << ": " << strerror(errno);
+        return false;
+    }
+
+    LOG(INFO) << "Input Node File Open: " << mInputDevicePath;
+    writeNodeByStringOnlyForWriting(mUseSepIndexNode, "1");
+
+    memset(&mFfEffect, 0, sizeof(mFfEffect));
+    mFfEffect.type = FF_PERIODIC;
+    mFfEffect.id = -1;
+    mFfEffect.replay.length = 0x5d;
+    mFfEffect.u.periodic.waveform = FF_CUSTOM;
+
+    if (!uploadForceFeedbackeffect()) {
+        LOG(ERROR) << "[initForceFeedbackEffect] initial upload failed";
+        return false;
+    }
+
+    LOG(INFO) << "Vibrator using ForceFeedback";
+    return true;
+}
+
+bool HwApi::uploadForceFeedbackeffect() {
+    LOG(DEBUG) << "[uploadForceFeedbackeffect]";
+    if (mInputFd < 0) {
+        return false;
+    }
+    if (mFfEffectId != -1) {
+        ioctl(mInputFd, EVIOCRMFF, mFfEffectId);
+        mFfEffectId = -1;
+    }
+    int ret = ioctl(mInputFd, EVIOCSFF, &mFfEffect);
+    if (ret < 0) {
+        LOG(ERROR) << "[uploadForceFeedbackeffect] ioctl failed: " << strerror(errno);
+        return false;
+    }
+    mFfEffectId = mFfEffect.id;
+    LOG(DEBUG) << "ioctl success";
+    LOG(DEBUG) << "THE_DEVICE_FF: " << mFfEffectId;
+    return true;
+}
+
+bool HwApi::writeInputEvent(uint16_t type, uint16_t code, int32_t value) {
+    LOG(DEBUG) << "[writeInputEvent]";
+    if (mInputFd < 0) {
+        return false;
+    }
+    struct input_event ev;
+    memset(&ev, 0, sizeof(ev));
+    gettimeofday(&ev.time, nullptr);
+    ev.type = type;
+    ev.code = code;
+    ev.value = value;
+    ssize_t ret = TEMP_FAILURE_RETRY(write(mInputFd, &ev, sizeof(ev)));
+    return ret == sizeof(ev);
+}
+
+bool HwApi::triggerForceFeedbackVibration(int value) {
+    LOG(DEBUG) << "[triggerForceFeedbackVibration]";
+    if (mFfEffectId < 0) {
+        return false;
+    }
+    return writeInputEvent(EV_FF, mFfEffectId, value);
+}
+
+bool HwApi::setForceFeedbackIndex(int index) {
+    mFfEffect.u.periodic.waveform = FF_CUSTOM;
+    mFfEffect.u.periodic.period = index;
+    return uploadForceFeedbackeffect();
+}
+
+bool HwApi::setForceFeedbackDuration(int duration) {
+    mFfEffect.replay.length = duration;
+    return uploadForceFeedbackeffect();
+}
+
+bool HwApi::setForceFeedbackAmplitude(int amplitude) {
+    LOG(DEBUG) << "[setForceFeedbackAmplitude]";
+    mFfEffect.u.periodic.magnitude = amplitude;
+    return uploadForceFeedbackeffect();
+}
+
+bool HwApi::setAndTriggerCommonInputff(const common_inputff_effects* effects) {
+    LOG(DEBUG) << "[setAndTriggerCommonInputff]";
+    if (!effects) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(mLock);
+    if (mInputFd < 0) {
+        if (!initForceFeedbackEffect()) {
+            return false;
+        }
+    }
+    mFfEffect.type = FF_PERIODIC;
+    mFfEffect.id = mFfEffectId;
+    mFfEffect.u.periodic.custom_len = sizeof(common_inputff_effects);
+    mFfEffect.u.periodic.custom_data = reinterpret_cast<__s16*>(const_cast<common_inputff_effects*>(effects));
+
+    if (!uploadForceFeedbackeffect()) {
+        return false;
+    }
+    bool ok = triggerForceFeedbackVibration(1);
+    mFfEffect.u.periodic.custom_len = 2;
+    mFfEffect.u.periodic.custom_data = nullptr;
+    return ok;
+}
+
 void HwApi::debug(int fd) {
     dprintf(fd, "HwApi Debug Info:\n");
     dprintf(fd, "  Prefix: %s\n", mPrefix.c_str());
@@ -438,6 +648,9 @@ void HwApi::debug(int fd) {
     dprintf(fd, "  Dynamic Intensities: %s\n", mCalDynamicIntensities ? "true" : "false");
     dprintf(fd, "  ASP Enable: %d\n", mAspEnable);
     dprintf(fd, "  Features bitmask: 0x%08x\n", mSupportFeatures);
+    dprintf(fd, "  Input FD: %d\n", mInputFd);
+    dprintf(fd, "  Input Device Path: %s\n", mInputDevicePath.c_str());
+    dprintf(fd, "  FF Effect ID: %d\n", mFfEffectId);
 }
 
 }  // namespace vibrator

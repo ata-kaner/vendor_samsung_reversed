@@ -29,6 +29,7 @@ enum sec_features {
     CAPABILITY_EXTERNAL_CONTROL = 10,
     COMMON_INPUTFF_INTERFACE = 11,
     PRIMITIVE_EFFECT_COMPOSE = 12,
+    HYBRID_PATTERN_COMMON_INPUTFF = 13,
 };
 
 enum sec_motor_types {
@@ -45,12 +46,33 @@ enum sec_motor_types {
     MOTOR_LINEAR_ACTIVE = 10,
 };
 
+struct common_inputff_packet {
+    int32_t data1;
+    int32_t data2;
+    int32_t data3;
+    int32_t data4;
+    int32_t data5;
+};
+
+struct common_inputff_effects {
+    common_inputff_packet packets[32];
+    int32_t count;
+    int32_t repeat;
+};
+
 constexpr int32_t INTENSITY_MIN = 1;
 constexpr int32_t INTENSITY_MAX = 10000;
 constexpr int32_t INTENSITY_DEFAULT = 10000;
 
 constexpr int32_t COMPOSITION_DELAY_MAX_MS = 1000;
 constexpr int32_t COMPOSITION_SIZE_MAX = 10;
+
+struct HapticEnginePacket {
+    int32_t data1;
+    int32_t data2;
+    int32_t data3;
+    int32_t data4;
+};
 
 }  // namespace vibrator
 }  // namespace hardware

@@ -8,6 +8,7 @@ package vendor.samsung.hardware.vibrator;
 import android.hardware.vibrator.Effect;
 import android.hardware.vibrator.IVibratorCallback;
 import vendor.samsung.hardware.vibrator.SehAmplitudeType;
+import vendor.samsung.hardware.vibrator.SehCommonInputffPacket;
 import vendor.samsung.hardware.vibrator.SehFifoType;
 import vendor.samsung.hardware.vibrator.SehFolderStatus;
 import vendor.samsung.hardware.vibrator.SehFolderTentModeStatus;
@@ -42,4 +43,7 @@ interface ISehVibrator {
     void performHybridHapticEngine(in SehHybridHapticEnginePacket[] packets, in int repeat);
     boolean supportsFolderTentModeStatusSetting();
     void setFolderTentModeStatus(in SehFolderTentModeStatus status);
+    boolean supportsHasFeature();
+    boolean hasFeature(in @utf8InCpp String feature);
+    void performCommonInputff(in SehCommonInputffPacket[] packets, in boolean repeat, in int timeout);
 }
